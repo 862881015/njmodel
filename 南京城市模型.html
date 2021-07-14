@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>南京城市模型</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.82.1/Build/Cesium/Widgets/widgets.css" />
+    <!-- <link rel="stylesheet" href="CesiumUnminified/Widgets/widgets.css" /> -->
+    <!-- <link rel="stylesheet" href="style.css" /> -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      #main {
+        height: 100%;
+        position: relative;
+      }
+
+      #map {
+        height: 100%;
+      }
+
+      .map-tooltip {
+        display: none;
+        position: absolute;
+        pointer-events: none;
+        padding: 4px 8px;
+        background-color: #003cff;
+        color: #fff;
+        border-radius: 5px;
+      }
+
+      .btns {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 99;
+      }
+
+      .btn {
+        display: inline-block;
+        background-color: #ffffff;
+        padding: 5px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+
+      .tooltip {
+        position: absolute;
+        color: #fff;
+        z-index: 100;
+        left: 0;
+        top: 0;
+        background: #0020ff;
+        padding: 10px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="main">
+      <div id="map"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.83.0/Build/Cesium/Cesium.js"></script>
+    <!-- <script src="CesiumUnminified/Cesium.js"></script> -->
+    <script>
+      class Map3D {
+        constructor(id) {
+          this._id = id;
+          this._initViewer();
+        }
+
+        _initViewer() {
+          var viewer = new Cesium.Viewer(this._id, {
+            baseLayerPicker: false,
+            timeline: false,
+            homeButton: false,
+            fullscreenButton: false,
+            shouldAnimate: true,
+            // infoBox: false,
+            sceneModePicker: false,
+            navigationInstructionsInitiallyVisible: false,
+            navigationHelpButton: false,
+            geocoder: false,
+            animation: false,
+            terrainExaggeration: 1.3, // terrain地形夸张1.3
+            // selectionIndicator: false,
+            // requestRenderMode: true,
+            // imageryProvider: new Cesium.WebMapTileServiceImageryProvider({
+            //   url: `http://t0.tianditu.gov.cn/img_w/wmts?tk=724c306135cb88099b6f5db09264d62d`,
+            //   layer: "img",
+            //   style: "default",
+            //   tileMatrixSetID: "w",
+            //   format: "tiles",
+            //   maximumLevel: 18
+            // }) // 天地图影像
+            imageryProvider: new Cesium.ArcGisMapServerImageryProvider({
+              url: "http://map.geoq.cn/arcgis/rest/services/ChinaOnlineStreetPurplishBlue/MapServer"
+            })
+          });
+
+          this.viewer = window.viewer = viewer;
+          viewer.scene.fxaa = false;
+          viewer._cesiumWidget._creditContainer.style.display = "none";
+          viewer.scene.globe.depthTestAgainstTerrain = true; // 开启地形深度检测，用于拾取坐标，平面坐标转空间坐标
+          // viewer.shadows = true; // 开启光照阴影
+
+          // viewer.imageryLayers.addImageryProvider(
+          //   new Cesium.WebMapTileServiceImageryProvider({
+          //     url: `http://t0.tianditu.gov.cn/cia_w/wmts?tk=724c306135cb88099b6f5db09264d62d`,
+          //     layer: "cia",
+          //     style: "default",
+          //     tileMatrixSetID: "w",
+          //     format: "tiles",
+          //     maximumLevel: 18
+          //   })
+          // ); // 天地图影像注记
+
+          // this._loadTerrain();
+          this._load3dTiles();
+          this._getClickedPoint();
+
+          window.viewer = viewer;
+        }
+
+        // cesium点击获取经纬度
+        _getClickedPoint() {
+          var viewer = this.viewer;
+          var handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
+
+          //todo：在显示地形情况下点击创建点
+          handler.setInputAction(function (movement) {
+            if (!Cesium.Entity.supportsPolylinesOnTerrain(viewer.scene)) {
+              console.log("当前浏览器不支持地形图");
+              return;
+            }
+            var earthPosition = viewer.scene.pickPosition(movement.position); //获取到地形图上面的坐标
+            var cartographic = Cesium.Cartographic.fromCartesian(earthPosition);
+            var point = [Cesium.Math.toDegrees(cartographic.longitude), Cesium.Math.toDegrees(cartographic.latitude)];
+            console.log(earthPosition);
+            console.log(point, cartographic.height);
+          }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        }
+
+        // 加载地形
+        _loadTerrain() {
+          var viewer = this.viewer;
+          var terrainProvider = new Cesium.CesiumTerrainProvider({
+            url: "http://data.marsgis.cn/terrain"
+          });
+
+          viewer.terrainProvider = terrainProvider;
+        }
+
+        // 加载3dtiles
+        _load3dTiles() {
+          var viewer = this.viewer;
+
+          var tileset = new Cesium.Cesium3DTileset({
+            // url: "http://127.0.0.1:7861/tileset.json"
+            url: "南京城市模型3dtiles_最终/tileset.json"
+            // url: "http://localhost:9000/model/548d6e00e3b611ebb5077ffc8b4bfb0a/tileset.json"
+            // url: "http://localhost:8080/Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/tileset.json"
+            // url: "3dtiles/tileset.json"
+            // url: "http://data.mars3d.cn/3dtiles/jzw-hefei/tileset.json"
+            // url: "南京城市模型3dtiles_有光照/tileset.json"
+            // url: "http://192.168.10.18:8712/tileset.json"
+            // url: "http://data.marsgis.cn/3dtiles/qx-xiaolou/tileset.json"
+          });
+          // tileset.style = new Cesium.Cesium3DTileStyle({
+          //   color: 'color("#0077F4")'
+          // });
+
+          window.tileset = this.tileset = tileset;
+
+          tileset.readyPromise
+            .then((tileset) => {
+              var rotateCenter = (this.rotateCenter = tileset.boundingSphere.center.clone());
+
+              var boundingSphere = tileset.boundingSphere;
+              viewer.camera.viewBoundingSphere(boundingSphere, new Cesium.HeadingPitchRange(0, -2.0, 0));
+              viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+
+              tileset.style = new Cesium.Cesium3DTileStyle({
+                color: {
+                  conditions: [
+                    // ["true", "rgba(0, 127.5, 255, 1)"] //'rgb(127, 59, 8)']
+                    ["true", "rgb(144, 255, 255)"]
+                  ]
+                }
+              });
+
+              tileset.tileVisible.addEventListener(function (tile) {
+                var content = tile.content;
+                var featuresLength = content.featuresLength;
+                for (var i = 0; i < featuresLength; i += 2) {
+                  let feature = content.getFeature(i);
+                  let model = feature.content._model;
+
+                  if (model && model._sourcePrograms && model._rendererResources) {
+                    Object.keys(model._sourcePrograms).forEach((key) => {
+                      let program = model._sourcePrograms[key];
+                      let fragmentShader = model._rendererResources.sourceShaders[program.fragmentShader];
+                      let v_position = "";
+                      if (fragmentShader.indexOf(" v_positionEC;") != -1) {
+                        v_position = "v_positionEC";
+                      } else if (fragmentShader.indexOf(" v_pos;") != -1) {
+                        v_position = "v_pos";
+                      }
+                      const color = `vec4(${feature.color.toString()})`;
+
+                      model._rendererResources.sourceShaders[program.fragmentShader] =
+                        "varying vec3 " +
+                        v_position +
+                        ";\n" +
+                        "void main(void){\n" +
+                        "    vec4 position = czm_inverseModelView * vec4(" +
+                        v_position +
+                        ",1);\n" +
+                        "    float glowRange = 360.0;\n" +
+                        "    gl_FragColor = " +
+                        color +
+                        ";\n" +
+                        // "    gl_FragColor = vec4(0.2,  0.5, 1.0, 1.0);\n" +
+                        "    gl_FragColor *= vec4(vec3(position.y / 100.0), 1.0);\n" +
+                        "    float time = fract(czm_frameNumber / 360.0);\n" +
+                        "    time = abs(time - 0.5) * 2.0;\n" +
+                        "    float diff = step(0.005, abs( clamp(position.y / glowRange, 0.0, 1.0) - time));\n" +
+                        "    gl_FragColor.rgb += gl_FragColor.rgb * (1.0 - diff);\n" +
+                        "}\n";
+                    });
+                    model._shouldRegenerateShaders = true;
+                  }
+                }
+              });
+
+              viewer.scene.primitives.add(tileset);
+
+              // tileset.modelMatrix = Cesium.Matrix4.fromArray([
+              //   0.9999991639813626, -0.00120972895081356, 0.00045671921521642234, 0, 0.001210107379239378, 0.9999989240207796, -0.0008292149385358272, 0, -0.0004557155984785122,
+              //   0.0008297669245885819, 0.999999551904972, 0, -1.0695239300839603, 1.9473890736699104, 22.24649197841063, 1
+              // ]);
+              tileset.modelMatrix = Cesium.Matrix4.fromArray([
+                0.9997785079010568, -0.012831966292450647, 0.016681600049333556, 0, 0.012696667745841661, 0.9998858411742486, 0.008191413029329353, 0, -0.016784807633340393,
+                -0.007977797962769317, 0.9998272975731247, 0, -371.99708290351555, -198.76192978397012, 19.227911971509457, 1
+              ]);
+
+              var cartographic = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
+              var surface = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0.0);
+              var offset = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, -30);
+              var translation = Cesium.Cartesian3.subtract(offset, surface, new Cesium.Cartesian3());
+              // tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+
+              viewer.camera.setView({
+                destination: { x: -2605988.707307117, y: 4742661.798213445, z: 3365770.9975646758 },
+                orientation: { heading: 5.675103064816117, pitch: -0.5707798988231652, roll: 6.281134080999041 }
+                // destination: { x: -2605966.9687233153, y: 4742526.841706598, z: 3365557.829619192 },
+                // orientation: { heading: 5.6861125709016775, pitch: -0.2800166930787791, roll: 0.000004332822820529714 }
+              });
+
+              // viewer.zoomTo(tileset, new Cesium.HeadingPitchRange(0.0, Cesium.Math.toRadians(-28), tileset.boundingSphere.radius * 2.3));
+
+              return tileset;
+            })
+            .otherwise(function (error) {
+              console.log(error);
+            });
+        }
+
+        // 旋转
+        rotate(type = "heading", degree = 1) {
+          if (!this.hpRoll) this.hpRoll = new Cesium.HeadingPitchRoll();
+          var hpRoll = this.hpRoll;
+          var position = this.rotateCenter;
+
+          var deltaRadians = Cesium.Math.toRadians(degree);
+          hpRoll[type] -= deltaRadians;
+          var m = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpRoll, Cesium.Ellipsoid.WGS84, Cesium.Transforms.eastNorthUpToFixedFrame);
+          this.tileset.modelMatrix = m;
+        }
+
+        // 添加基于中心点的坐标轴
+        _addFrame() {
+          var position = this.rotateCenter;
+          var hprRollZero = new Cesium.HeadingPitchRoll();
+          var modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(position, hprRollZero, Cesium.Ellipsoid.WGS84, Cesium.Transforms.eastNorthUpToFixedFrame);
+
+          this.viewer.scene.primitives.add(
+            new Cesium.DebugModelMatrixPrimitive({
+              modelMatrix: modelMatrix,
+              length: 300.0,
+              width: 10.0
+            })
+          );
+        }
+      }
+
+      function getHPR() {
+        let { heading, pitch, roll } = viewer.camera;
+        return { heading, pitch, roll };
+      }
+
+      var map3d = new Map3D("map");
+    </script>
+  </body>
+</html>
